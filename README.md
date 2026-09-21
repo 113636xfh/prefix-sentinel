@@ -86,7 +86,8 @@ prompt / KV cache 能否复用，取决于新请求的前缀是否与旧请求�
 ## 安装
 
 ```bash
-pi install /path/to/prefix-sentinel
+git clone https://github.com/113636xfh/prefix-sentinel.git
+pi install ~/prefix-sentinel   # 或任意稳定本地路径
 ```
 
 或把 `index.ts` 放入项目 `.pi/extensions/`。无配置项；下一个请求开始记链，`/reload` 后自动续用。

@@ -86,6 +86,7 @@ Non-inference requests are lightweight lines (`source: "other"`: method/url/body
 ## Installation
 
 ```bash
+git clone https://github.com/113636xfh/prefix-sentinel.git
 pi install /path/to/prefix-sentinel
 ```
 
