@@ -20,13 +20,13 @@ Whether a prompt / KV cache can be reused depends on whether the new request's p
 
 ### The per-request rhythm
 
-![One request, one line](docs/images/01-loop.png)
+![One request, one line](docs/images/01-loop-en.png)
 
 Every outbound request passes through the global `fetch` — the extension wraps it once per process (`/reload` only swaps in the observer). For inference-shaped requests (JSON with a `messages[]` array): capture the wire body (read via `clone()`, never consumed) → full-text diff + four-way prefix classification against the previous body → append one line to `log.jsonl` and atomically overwrite `last-request.json` with this body (the next request's baseline). Non-inference requests get a lightweight line (method/url/size) only; their bodies are not kept.
 
 ### Verdict and notification
 
-![Verdict and notification](docs/images/02-verdict.png)
+![Verdict and notification](docs/images/02-verdict-en.png)
 
 Four-way prefix classification (longest common prefix of the message arrays, compared element-wise as JSON):
 

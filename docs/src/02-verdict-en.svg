@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 650" font-family="'Noto Sans CJK SC','Noto Sans',sans-serif">
+  <rect x="0" y="0" width="1280" height="650" fill="#ffffff"/>
+
+  <text x="640" y="52" font-size="26" font-weight="bold" fill="#1a202c" text-anchor="middle">Verdict and Notification</text>
+  <text x="640" y="86" font-size="15" fill="#5a6a80" text-anchor="middle">Quiet when the prefix is intact; a warning when it breaks — the plugin&#8217;s only judgment</text>
+
+  <!-- trigger chip (gray) -->
+  <rect x="370" y="120" width="220" height="48" rx="10" fill="#f7f9fb" stroke="#94a3b8" stroke-width="2"/>
+  <text x="480" y="150" font-size="20" font-weight="bold" fill="#2d3748" text-anchor="middle">Wire request</text>
+
+  <!-- arrow 1: chip bottom center -> gate A top center -->
+  <line x1="480" y1="168" x2="480" y2="172" stroke="#718096" stroke-width="2.5"/>
+  <polygon points="472,172 488,172 480,186" fill="#718096"/>
+
+  <!-- gate A: inference shape? (green) -->
+  <rect x="330" y="186" width="300" height="76" rx="10" fill="#eefaf3" stroke="#22a06b" stroke-width="2"/>
+  <text x="480" y="216" font-size="20" font-weight="bold" fill="#1e7a4c" text-anchor="middle">Inference shape?</text>
+  <text x="480" y="244" font-size="15" fill="#5a6a80" text-anchor="middle">JSON + messages[]</text>
+
+  <!-- no rail A: gate A right-edge center -> blue box left-edge center -->
+  <line x1="630" y1="224" x2="836" y2="224" stroke="#d64545" stroke-width="2.5"/>
+  <polygon points="836,216 836,232 850,224" fill="#d64545"/>
+  <text x="642" y="216" font-size="15" fill="#d64545">no</text>
+
+  <!-- non-inference box (blue) -->
+  <rect x="850" y="192" width="260" height="64" rx="10" fill="#eef3fb" stroke="#3b82c4" stroke-width="2"/>
+  <text x="980" y="220" font-size="20" font-weight="bold" fill="#1d4f8a" text-anchor="middle">Non-inference</text>
+  <text x="980" y="244" font-size="15" fill="#5a6a80" text-anchor="middle">method &#183; url &#183; size only</text>
+
+  <!-- arrow 2: gate A bottom center -> step B top center -->
+  <line x1="480" y1="262" x2="480" y2="278" stroke="#718096" stroke-width="2.5"/>
+  <polygon points="472,278 488,278 480,292" fill="#718096"/>
+  <text x="494" y="282" font-size="15" fill="#5a6a80">yes</text>
+
+  <!-- step B: diff + classify (green) -->
+  <rect x="330" y="292" width="300" height="76" rx="10" fill="#eefaf3" stroke="#22a06b" stroke-width="2"/>
+  <text x="480" y="322" font-size="20" font-weight="bold" fill="#1e7a4c" text-anchor="middle">diff + classify</text>
+  <text x="480" y="350" font-size="15" fill="#5a6a80" text-anchor="middle">vs previous full body</text>
+
+  <!-- arrow 3: step B bottom center -> gate C top center -->
+  <line x1="480" y1="368" x2="480" y2="384" stroke="#718096" stroke-width="2.5"/>
+  <polygon points="472,384 488,384 480,398" fill="#718096"/>
+  <text x="494" y="386" font-size="15" fill="#5a6a80">yes</text>
+
+  <!-- gate C: prefix intact? (green) -->
+  <rect x="330" y="398" width="300" height="76" rx="10" fill="#eefaf3" stroke="#22a06b" stroke-width="2"/>
+  <text x="480" y="428" font-size="20" font-weight="bold" fill="#1e7a4c" text-anchor="middle">Prefix intact?</text>
+  <text x="480" y="456" font-size="15" fill="#5a6a80" text-anchor="middle">append, setup unchanged</text>
+
+  <!-- arrow 4: gate C bottom center -> result A top center -->
+  <line x1="480" y1="474" x2="480" y2="496" stroke="#718096" stroke-width="2.5"/>
+  <polygon points="472,496 488,496 480,510" fill="#718096"/>
+  <text x="494" y="492" font-size="15" fill="#5a6a80">yes</text>
+
+  <!-- result A: quiet (green) -->
+  <rect x="330" y="510" width="300" height="64" rx="10" fill="#eefaf3" stroke="#22a06b" stroke-width="2"/>
+  <text x="480" y="538" font-size="20" font-weight="bold" fill="#1e7a4c" text-anchor="middle">Quiet log line</text>
+  <text x="480" y="562" font-size="15" fill="#5a6a80" text-anchor="middle">kvReusable = true</text>
+
+  <!-- no rail C: gate C right-edge center -> result B left-edge center -->
+  <line x1="630" y1="436" x2="836" y2="436" stroke="#d64545" stroke-width="2.5"/>
+  <polygon points="836,428 836,444 850,436" fill="#d64545"/>
+  <text x="642" y="428" font-size="15" fill="#d64545">no</text>
+
+  <!-- result B: warn (gray) -->
+  <rect x="850" y="404" width="260" height="64" rx="10" fill="#f7f9fb" stroke="#94a3b8" stroke-width="2"/>
+  <text x="980" y="432" font-size="20" font-weight="bold" fill="#2d3748" text-anchor="middle">UI warning</text>
+  <text x="980" y="456" font-size="15" fill="#5a6a80" text-anchor="middle">kvReusable = false</text>
+
+  <!-- caption -->
+  <text x="640" y="616" font-size="15" fill="#5a6a80" text-anchor="middle">Both paths write one log.jsonl line; the latest full body is saved atomically to last-request.json</text>
+</svg>

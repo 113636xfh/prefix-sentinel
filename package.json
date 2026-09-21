@@ -14,8 +14,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test test/",
     "docs:render": "node docs/render.mjs",
-    "docs:verify": "node docs/verify.mjs 01-loop 02-verdict",
-    "docs:probe": "node docs/probe-pixels.mjs"
+    "docs:verify": "node docs/verify.mjs 01-loop 01-loop-en 02-verdict 02-verdict-en",
+    "docs:probe": "node docs/probe-pixels.mjs 01-loop 01-loop-en 02-verdict 02-verdict-en"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"

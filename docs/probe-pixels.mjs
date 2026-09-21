@@ -54,38 +54,39 @@ function expect(name, x, y, hex, label, opts = {}) {
 	console.log(`${ok ? "ok  " : "FAIL"} ${label} @(${x},${y}) expect ${hex} got modal ${s.modal} cov ${s.coverage}`);
 }
 
-// figure 1: node fills at node centers (viewBox coords)
-expect("01-loop", 160, 184, "#f7f9fb", "node1 gray  fill");
-expect("01-loop", 480, 184, "#eefaf3", "node2 green fill");
-expect("01-loop", 800, 184, "#fdeacc", "node3 orange fill");
-expect("01-loop", 1120, 184, "#eef3fb", "node4 blue  fill");
-// loop dashes: along y=300; at least half must be dash color (rest = white gaps)
-{
+// sample sets are layout-defined; zh and en figures share the same geometry
+const loopChecks = (name) => {
+	expect(name, 160, 184, "#f7f9fb", "node1 gray  fill");
+	expect(name, 480, 184, "#eefaf3", "node2 green fill");
+	expect(name, 800, 184, "#fdeacc", "node3 orange fill");
+	expect(name, 1120, 184, "#eef3fb", "node4 blue  fill");
 	const dashC = [0x94, 0xa3, 0xb8];
 	let dash = 0;
 	for (const x of [300, 400, 500, 600, 700, 800, 900, 1000]) {
-		const s = sample("01-loop", x, 300, 1);
+		const s = sample(name, x, 300, 1);
 		const [r, g, b] = s.modal.split(",").map(Number);
 		if (Math.abs(r - dashC[0]) + Math.abs(g - dashC[1]) + Math.abs(b - dashC[2]) <= 24) dash++;
 	}
-	console.log(`${dash >= 3 ? "ok  " : "FAIL"} loop dash presence: ${dash}/8 samples dash-colored`);
+	console.log(`${dash >= 3 ? "ok  " : "FAIL"} ${name} loop dash presence: ${dash}/8`);
 	if (dash < 3) failed = true;
+	expect(name, 20, 20, "#ffffff", "background");
+};
+const verdictChecks = (name) => {
+	expect(name, 390, 130, "#f7f9fb", "trigger gray fill");
+	expect(name, 480, 224, "#eefaf3", "gate A green fill");
+	expect(name, 980, 224, "#eef3fb", "non-inference blue fill");
+	expect(name, 480, 330, "#eefaf3", "step B green fill");
+	expect(name, 480, 436, "#eefaf3", "gate C green fill");
+	expect(name, 480, 542, "#eefaf3", "result A green fill");
+	expect(name, 980, 436, "#f7f9fb", "result B gray fill");
+	expect(name, 730, 224, "#d64545", "rail A red shaft", { solid: false });
+	expect(name, 730, 436, "#d64545", "rail C red shaft", { solid: false });
+	expect(name, 1260, 640, "#ffffff", "background");
+};
+
+for (const name of process.argv.slice(2)) {
+	console.log(`\n=== ${name} ===`);
+	name.includes("loop") ? loopChecks(name) : verdictChecks(name);
 }
-
-// figure 2: node fills + red rails
-expect("02-verdict", 480, 144, "#f7f9fb", "trigger gray fill");
-expect("02-verdict", 480, 224, "#eefaf3", "gate A green fill");
-expect("02-verdict", 980, 224, "#eef3fb", "non-inference blue fill");
-expect("02-verdict", 480, 330, "#eefaf3", "step B green fill");
-expect("02-verdict", 480, 436, "#eefaf3", "gate C green fill");
-expect("02-verdict", 480, 542, "#eefaf3", "result A green fill");
-expect("02-verdict", 980, 436, "#f7f9fb", "result B gray fill");
-expect("02-verdict", 730, 224, "#d64545", "rail A red shaft", { solid: false });
-expect("02-verdict", 730, 436, "#d64545", "rail C red shaft", { solid: false });
-
-// backgrounds must stay white (no stray fills)
-expect("01-loop", 20, 20, "#ffffff", "fig1 background");
-expect("02-verdict", 1260, 640, "#ffffff", "fig2 background");
-
 console.log(failed ? "PIXEL PROBE FAILED" : "PIXEL PROBE PASSED");
 process.exit(failed ? 1 : 0);
