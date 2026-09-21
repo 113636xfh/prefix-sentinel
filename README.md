@@ -1,120 +1,103 @@
 # prefix-sentinel
 
-只读观测型 pi 扩展：**检查前缀有没有改变**。
+> 只观测的 pi 扩展 —— wire 层前缀一致性检查器。
+> 不改请求、不动响应、不加工具；只回答一个问题：**这段时间里，发给模型框架的请求前缀有没有变？**
+>
+> [English](README.en.md)
 
-启用后它代理（拦截观察）pi 发往推理框架的**每一次**请求——在 `before_provider_request`
-钩子里拿到 pi-ai 刚构建好的 wire body（system、tools、messages、model…，即真正发出去
-的全文），与上一次请求的全文做**全文 diff**，并把结果记入日志。发回给 Agent 的
-**响应完全不经过本插件**（pi 直接把 provider 响应交给 Agent），请求本身也原样放行、
-一个字节都不改。
+## 为什么需要它
 
-打开它、正常使用一段时间，之后看 `log.jsonl` 就知道期间前缀是否被改过、改在哪里。
+prompt / KV cache 能否复用，取决于新请求的前缀是否与旧请求相同；任何改动都可能使前缀缓存失效。pi 的设计与开放生态注定了：pi agent 本身和某些插件都可能修改前缀。本插件的目的就是监测这类修改：对每个实际发出的请求取 wire 原文（provider 真正收到的字节序列），与上一份全文 diff，把变化定位到具体消息。
 
-## 磁盘布局（`<项目>/.pi/prefix-sentinel/`）
+## 特性
 
-| 文件 | 内容 |
-|---|---|
-| `last-request.json` | **只保留最新一份**发给框架的全文（pretty JSON，每次原子覆盖：临时文件 + rename） |
-| `log.jsonl` | 每次请求一行：与上一份全文的**完整 diff** + 结构化前缀判定 |
+- **全量覆盖**：wire 层包装全局 `fetch`，观测进程发出的每个 HTTP 请求——包括绕过 `before_provider_request` 的（原生压缩摘要、`complete()` 直连、子代理……），无一漏网。
+- **纯观测**：请求原样放行，观测与请求成败完全解耦；零运行时依赖。
+- **判定 + 通知**：前缀完好 → 安静记一行；被破坏 → UI 警告，`kvReusable` 回答“是否需要全量 prefill”。
+- **有界磁盘**：全文只留最新一份（原子覆盖）；日志每请求一行，变更区永不截断。
 
-这样磁盘上不会无限堆全文：任意时刻的"当前全文"就是 `last-request.json`，
-历史变化全部由 `log.jsonl` 的逐轮 diff 还原。
+## 工作原理
 
-## log.jsonl 每行字段
+### 每个请求的观测节奏
+
+![每个请求，一行记录](docs/images/01-loop.png)
+
+每个出站请求都经过全局 `fetch`——扩展每进程包一层（`/reload` 仅换观测器）。推理形状（JSON 且含 `messages[]`）的请求：捕获 wire 原文（`Request` 经 `clone()` 读取，不被消费）→ 与上一份全文 diff + 前缀四分类 → `log.jsonl` 记一行，`last-request.json` 原子覆盖为本次全文（下一个请求的基线）。非推理请求只记轻量行（method/url/体积），正文不留。
+
+### 判定与通知
+
+![判定与通知](docs/images/02-verdict.png)
+
+前缀四分类（消息数组逐条 JSON 比较求最长公共前缀）：
+
+| classification | 含义 |
+| --- | --- |
+| `append` | 旧列表逐条不变，尾部纯追加 —— 前缀完好 |
+| `prefix-changed` | 旧列表内部某条变了 —— 缓存前缀被破坏 |
+| `rewind` | 新列表是旧列表的严格前缀 —— 上下文被截断 |
+| `branch` | 新列表更短且中途分叉 —— 上下文被替换 |
+
+**前缀完好** = `append` 且 `tools` / `system` / `model` 均未变（system 即 `messages[0]`），此时 `kvReusable: true`——服务端只需 prefill 新尾部。
+
+**通知规则**：首次请求或无基线 → 不警告；跨进程续链时全新上下文视为预期（安静），续接上下文分叉或 setup 变化才警告；同进程内 `append` 且 setup 未变安静，其余每次变更一条 UI 警告。`modelChanged` 只记录不警告（换模型通常是有意为之）。
+
+### 链的连续性
+
+基线在磁盘上（`last-request.json`），不在内存里：同一进程的下一个请求、或**新进程**的第一个请求都从磁盘续链——pi 重启、`/reload` 不断链；新进程首条日志带 `crossRestart: true`。旧版本基线格式不同，标记 `baselineIgnored: "legacy-format"` 后从当前请求重开链，避免误报。
+
+## 磁盘布局（`.pi/prefix-sentinel/`，按项目 cwd）
+
+`last-request.json`：最新一份 wire 全文（`raw` 逐字节原文 + `pretty` 格式化副本，每请求原子覆盖，恒有一份）；`log.jsonl`：每请求一行，只追加，可随时清空重开链。`url` 只保留 host + path（query 可能带凭据）。
+
+## log.jsonl 字段
 
 ```jsonc
 {
-  "ts": 1758520000000,        // 请求时刻
-  "process": 1758519000000,   // 本进程启动时刻（区分并发进程）
-  "index": 12,                // 本进程内的请求序号
-  "model": "anthropic/claude-…",
-  "messages": 40,             // 本请求 messages 条数
-  "tools": 9,                 // 本请求 tools 条数
-  "prevIndex": 11,            // 对比的上一次请求序号
-  "crossRestart": false,      // true = 与上一个进程的最后一次请求对比
+  "ts": 1789993868725,        // 本次请求时间
+  "process": 1789993754463,   // 本进程启动时间（跨进程判别）
+  "index": 3,                 // 本进程内请求序号
+  "model": "…",               // 取自请求体
+  "messages": 272,            // 本次消息数
+  "tools": 19,                // 本次 tools 数
+  "prevIndex": 2,             // 基线是哪个请求
+  "crossRestart": true,       // 仅跨进程首条
   "classification": "append", // append | prefix-changed | rewind | branch
-  "commonPrefixMessages": 11, // 两条请求的最长公共 messages 前缀长度
-  "firstDivergentMessage": 11,// 首个不同的 message 下标（无则为 null）
-  "toolsChanged": false,
+  "commonPrefixMessages": 270,// 最长公共前缀（消息数）
+  "firstDivergentMessage": 270,// 首个分叉消息下标（仅 prefix-changed/branch）
+  "toolsChanged": false,      // setup 三标志
   "systemChanged": false,
   "modelChanged": false,
-  "changed": false,
-  "diffOmittedContext": { "prefix": 94, "suffix": 12 }, // 被折叠为计数的未变上下文行数
-  "diffBlockDumped": false,   // true = 变更区过大，用整块 -/+ 倾倒（仍然完整）
-  "diffChars": 234,
-  "diff": "  …94 unchanged lines …\n- …\n+ …"  // 完整变更区 diff
+  "kvReusable": true,         // append|rewind 且 setup 未变
+  "changed": false,           // 分类≠append 或任一 setup 变化
+  "diffOmittedContext": { "prefix": 260, "suffix": 3 }, // 折叠的未变行数
+  "diff": "  { …完整变更区… }" // 变更区完整，未变上下文折叠为计数
 }
 ```
 
-分类语义（上一条请求 → 本条请求的 messages 列表）：
-
-| classification | 含义 | 前缀是否 intact |
-|---|---|---|
-| `append` | 旧 messages 逐条原样保留，只往后追加 | ✅ 是（KV 前缀可复用） |
-| `prefix-changed` | 旧列表内某条 message 变了 | ❌ 前缀被改（缓存必断） |
-| `rewind` | 新列表是旧列表的严格前缀（截断，如 /rewind） | 新请求的前缀 = 自身，合理 |
-| `branch` | 新列表更短且中间有差异 | ❌ 分支/改写 |
-
-注意：**diff 展示完整变更区，从不截断**；只有未变的头部/尾部上下文折叠为
-`… N unchanged lines …` 计数行（全文本身在 `last-request.json`，无损）。
+非推理请求为轻量行（`source: "other"`：method/url/bodyChars）；首次请求行带 `"first": true`。
 
 ## 可靠性设计
 
-- **永不影响 Agent**：整个 handler 包在 try/catch 里；任何异常只写一条
-  `{"error": …}` 日志行，不抛出、不改 payload。响应路径本就不经过这里。
-- **原子写**：`last-request.json` 走临时文件 + rename，不会写半个文件。
-- **磁盘故障降级**：写盘失败后自动转为纯内存观测（内存里仍保留上一份全文，
-  UI 通知照常），不抛错。
-- **内存有界**：只保留最近一份全文字符串。
-- **跨进程延续**：进程重启后第一个请求会与磁盘上上一个进程的最后一份全文对比
-  （`crossRestart: true`；新会话上下文全新属预期，只在 tools/system 变化时通知）。
-- **零运行时依赖**：不装任何包即可运行；纯 Node fs + JSON。
-- **已知限制**：同一 cwd 同时跑多个 pi 会话时，它们共享 `log.jsonl` 并互相覆盖
-  `last-request.json`（用 `process` 字段区分行来源）；一个会话只开一个哨兵。
-
-## 何时会 UI 通知（warning）
-
-- 会话内：`classification` 为 `prefix-changed` / `branch` / `rewind`，或 `toolsChanged` / `systemChanged`
-- 跨进程重启：只在新上下文与上一次请求**有实质重叠**（`commonPrefixMessages > 0`）且发生分歧，
-  或 `toolsChanged` / `systemChanged` 时通知（全新会话上下文属预期，不通知）
-- 纯 `modelChanged` 只记日志不通知（通常是你主动切的模型）
+- **请求永远原样放行**：包装层以相同参数调用原 `fetch`、原样返回结果；观测排队在微任务、每环节自吞失败——永不延迟、不改变、不阻断。
+- **正文从不被消费**：`Request` 经 `clone()` 读取；不可克隆的流体只记轻量行。
+- **磁盘故障降级**：写盘失败后转纯内存观测，不打扰流程。
+- **判定保守**：只依据 wire 字节与显式 setup 字段；wire 有差异但 token 未变（如 `max_tokens`）时，把完整 diff 摆出来由你看。
 
 ## 安装
 
-```powershell
-pi install "D:\01-R&D\Project-prefix-sentinel"
+```bash
+pi install /path/to/prefix-sentinel
 ```
 
-不需要 `npm install`（无运行时依赖）。typecheck 需要 devDependencies：
+或把 `index.ts` 放入项目 `.pi/extensions/`。无配置项；下一个请求开始记链，`/reload` 后自动续用。
 
-```powershell
-npm install
-node node_modules/typescript/bin/tsc -p tsconfig.json   # 仓库路径含 & 时 .bin shim 会失败，用 node 直调
-bun test test/
-```
+## 已知限制
 
-## 与 pi-vcc-plus 的关系
+- 非推理请求只计轻量行、不留正文——不参与前缀链。
+- fetch 之前就被中止的请求（如 provider 忽略自定义 fetch）未触达服务端，自然不进链——期望行为。
+- 磁盘只留最新一份全文；历史以 `log.jsonl` 的 diff 与分类存在。
+- 判定是文本层的：provider 端分词差异不可见——但 wire 字节相同即 token 序列相同，这个方向可靠。
 
-完全独立：零共享代码、零共享状态，可单独启用/禁用，也可同时启用。
+## License
 
-**能看到什么 / 看不到什么**（已对 pi 0.85.1 源码核实）：
-
-- **能看到**：Agent 正常回合的每一条请求，以及压缩后的第一批请求——这些都走
-  Agent 的 stream 路径，会触发 `onPayload` → `before_provider_request`。
-- **看不到**：pi-vcc-plus 的**校验请求**。它走 `ctx.modelRegistry.complete(...)` →
-  `ModelRegistry.complete` → `runtime.complete`（model-registry.js:65-67），不经过 Agent，
-  model-registry / model-runtime 里没有任何 `onPayload`。
-
-所以“B 面”（校验请求前缀是否等于上一次真实请求）由 **pi-vcc-plus 自己**验证：
-校验请求经自定义 fetch 发出，出站 body 的 `tools` 用捕获到的 wire JSON 原样替换，
-body 写入 `.pi/prefix-sentinel/check-request.json`，再由 pi-vcc-plus 与哨兵的
-`last-request.json` 做字节级前缀比较，结果（`prefixIdentical` + 首个分歧位置）写进
-pi-vcc-plus 自己的 `checkPrefix` 日志。
-
-证据链分工：
-
-| 证据 | 来源 | 覆盖 |
-|---|---|---|
-| 正常回合前缀稳定性（A 面） | 哨兵 `log.jsonl` | 每次正常请求 |
-| 校验请求字节一致（B 面） | pi-vcc-plus `checkPrefix` 日志 + `check-request.json` | 每次压缩校验 |
-| KV 缓存实际复用 | pi-vcc-plus `round.prefixSuspect`（cacheRead 断言） | 每次校验请求 |
+MIT — 见 [LICENSE](LICENSE)
